@@ -21,10 +21,9 @@ app.use(express.json());  // ✅ Ensures JSON parsing works
 app.use(cookieParser());
 
 app.get("/", (req, res) => res.send("Server is running 🚀"));
+
 // User Routes
 app.use("/api/user", routes)
 
 // Start Server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-

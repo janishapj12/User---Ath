@@ -40,37 +40,72 @@ export const register = async (req, res) => {
 };
 
 // Send verification email
-export const  sendEmail = async (req, res) => {
-   
+export const sendEmail = async (req, res) => {
     try {
-        const {id} = req.body;
-        const user = await userModel.findById(id)
-        if(user.isAccountVerify){
-            return res.json({success : false , msg : "account alrady verify"})
+        const { id, email } = req.body;
+        
+        // Validate input
+        if (!id && !email) {
+            return res.status(400).json({ 
+                success: false, 
+                msg: "Either User ID or Email is required" 
+            });
         }
+
+        // Find user with proper error handling
+        const user = id 
+            ? await userModel.findById(id)
+            : await userModel.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                msg: "User not found" 
+            });
+        }
+
+        // Only now check verification status
+        if (user.isAccountVerify) {
+            return res.status(400).json({ 
+                success: false, 
+                msg: "Account already verified" 
+            });
+        }
+
+        // Generate OTP
         const otp = String(Math.floor(100000 + Math.random() * 900000));
         user.verifyotp = otp;
         user.verifyotpExpireAt = Date.now() + 24 * 60 * 60 * 1000;
-        await user.save()
+        await user.save();
+
+        // Send email
         const mailOptions = {
             from: process.env.SENDER_EMAIL,
             to: user.email,
-            subject: "Welcome! Account Verification OTP",
+            subject: "Account Verification OTP",
             html: `
-                <p>Dear User,</p>
-                <p>Welcome to our website! Your OTP for account verification is <b>${otp}</b>.</p>
-                <p>This OTP will expire in 24 hours.</p>
-                <p>Best regards,</p>
-                <p>Your Website Team</p>
+                <p>Dear ${user.name},</p>
+                <p>Your verification code is: <strong>${otp}</strong></p>
+                <p>Valid for 24 hours</p>
             `,
         };
+
         await transporter.sendMail(mailOptions);
-        console.log("Email sent successfully");
+        
+        return res.json({ 
+            success: true, 
+            msg: "Verification email sent successfully"
+        });
+
     } catch (error) {
-        console.error("Error sending email:", error);
+        console.error("Email sending error:", error);
+        return res.status(500).json({ 
+            success: false, 
+            msg: "Failed to send email",
+            error: error.message
+        });
     }
 };
-
 // Verify Email
 export const verifyEmail = async (req, res) => {
     const {id, otp } = req.body;
@@ -182,23 +217,61 @@ export const logout = async (req, res) => {
 };
 
 // Reset Password OTP
-export const sendResetOtp = async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.json({ success: false, msg: "Email required" });
-
+export const sendResetOtp = async (req,res) => {
     try {
-        const user = await userModel.findOne({ email });
-        if (!user) return res.json({ success: false, msg: "User not found" });
+        const { id, email } = req.body;
+        
+        // Validate input
+        if (!id && !email) {
+            return res.status(400).json({ 
+                success: false, 
+                msg: "Either User ID or Email is required" 
+            });
+        }
 
+        // Find user with proper error handling
+        const user = id 
+            ? await userModel.findById(id)
+            : await userModel.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                msg: "User not found" 
+            });
+        }
+        // Generate OTP
         const otp = String(Math.floor(100000 + Math.random() * 900000));
-        user.resetotp = otp;
-        user.resetotpexpireAt = Date.now() + 15 * 60 * 1000;
+        user.verifyotp = otp;
+        user.verifyotpExpireAt = Date.now() + 24 * 60 * 60 * 1000;
         await user.save();
 
-        await sendEmail(user.email, otp);
-        return res.json({ success: true, msg: "Reset OTP sent successfully" });
-    } catch (e) {
-        return res.json({ success: false, msg: e.message });
+        // Send email
+        const mailOptions = {
+            from: process.env.SENDER_EMAIL,
+            to: user.email,
+            subject: "password Verification OTP",
+            html: `
+                <p>Dear ${user.name},</p>
+                <p>Your verification code is: <strong>${otp}</strong></p>
+                <p>Valid for 24 hours</p>
+            `,
+        };
+
+        await transporter.sendMail(mailOptions);
+        
+        return res.json({ 
+            success: true, 
+            msg: "password Verification email sent successfully"
+        });
+
+    } catch (error) {
+        console.error("Email sending error:", error);
+        return res.status(500).json({ 
+            success: false, 
+            msg: "Failed to send email",
+            error: error.message
+        });
     }
 };
 // Authentication Check
@@ -211,11 +284,12 @@ export const isAuthenticated = async (req, res) => {
 };
 
 // Reset Password
-export const resetPass = async (req, res) => {
+export const resetPass = async (req,res) => {
     const { email, otp, newPassword } = req.body;
     if (!email || !otp || !newPassword) return res.json({ success: false, msg: "Missing details" });
 
     try {
+        
         const user = await userModel.findOne({ email });
         if (!user || user.resetotp !== otp || user.resetotpexpireAt < Date.now()) {
             return res.json({ success: false, msg: "Invalid or expired OTP" });
